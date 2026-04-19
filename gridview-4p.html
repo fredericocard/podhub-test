@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#e8dcc8">
+  <title>PodHub - Grid View</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Jaldi:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: #e8dcc8;
+    }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      overflow: hidden;
+    }
+
+    /* ── Grid Container (flex columns like JSX) ── */
+    .grid-container {
+      flex: 1;
+      display: flex;
+      gap: 6px;
+      padding: 10px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .grid-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* ── Player Tile ── */
+    .player-tile {
+      flex: 1;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Claimed tile = solid border + color tint */
+    .player-tile.claimed {
+      border: 2px solid;
+    }
+
+    /* Unclaimed tile = dashed border + dim */
+    .player-tile.unclaimed {
+      border: 2px dashed rgba(138,154,142,0.25);
+      background-color: rgba(138,154,142,0.03);
+    }
+
+    .tile-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Rotated tiles: dimensions are swapped by JS so content fits perfectly after rotation */
+    .tile-content.rotate-left {
+      transform: rotate(90deg);
+    }
+
+    .tile-content.rotate-right {
+      transform: rotate(-90deg);
+    }
+
+    .tile-normal {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    .tile-commander {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 10px;
+      text-align: center;
+      margin-top: 6px;
+      max-width: 90%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .commander-dash {
+      color: rgb(138,154,142);
+      font-size: 10px;
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    .life-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      max-width: 100%;
+    }
+
+    .life-minus-btn {
+      width: var(--btn-size, 32px);
+      height: var(--btn-size, 32px);
+      border-radius: 50%;
+      border: 1.5px solid rgba(168,74,58,0.2);
+      background: rgba(168,74,58,0.12);
+      color: rgb(168,74,58);
+      font-size: var(--btn-font, 20px);
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .life-minus-btn:active {
+      transform: scale(0.9);
+    }
+
+    .claimed .life-minus-btn {
+      border: 1px solid rgb(245,239,227);
+      background: rgba(245,239,227,0.18);
+      color: rgb(245,239,227);
+    }
+
+    .claimed .life-minus-btn:active {
+      background: rgba(245,239,227,0.3);
+    }
+
+    .life-number {
+      font-family: 'Jaldi', sans-serif;
+      font-weight: 900;
+      font-size: var(--life-font-size, 80px);
+      color: rgb(44,62,54);
+      line-height: 1;
+      text-align: center;
+      letter-spacing: -2px;
+      transition: color 0.2s ease;
+    }
+
+    .life-number.critical {
+      color: rgb(168,74,58);
+    }
+
+    .life-plus-btn {
+      width: var(--btn-size, 32px);
+      height: var(--btn-size, 32px);
+      border-radius: 50%;
+      border: 1.5px solid rgba(42,138,86,0.2);
+      background: rgba(42,138,86,0.12);
+      color: rgb(42,138,86);
+      font-size: var(--btn-font, 20px);
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .life-plus-btn:active {
+      transform: scale(0.9);
+    }
+
+    .claimed .life-plus-btn {
+      border: 1px solid rgb(245,239,227);
+      background: rgba(245,239,227,0.18);
+      color: rgb(245,239,227);
+    }
+
+    .claimed .life-plus-btn:active {
+      background: rgba(245,239,227,0.3);
+    }
+
+    /* Player colors — applied dynamically via JS based on commander color identity */
+
+    /* Join button — positioned at bottom-right corner of the cell content */
+    .join-btn {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(26,122,106,0.18);
+      border: 1px solid rgba(26,122,106,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+    }
+    /* Left column: player looks from left, their right side = physical bottom */
+    .grid-column:first-child .join-btn {
+      bottom: 8px;
+      left: 8px;
+      transform: rotate(90deg);
+    }
+    /* Right column: player looks from right, their right side = physical top */
+    .grid-column:last-child .join-btn {
+      top: 8px;
+      right: 8px;
+      transform: rotate(-90deg);
+    }
+    .join-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Soft pulse + glow animation for unclaimed join buttons */
+    @keyframes joinPulseGlow {
+      0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); }
+      30%  { transform: scale(1.12); box-shadow: 0 0 12px 4px rgba(26,122,106,0.35); }
+      60%  { transform: scale(1.05); box-shadow: 0 0 8px 2px rgba(26,122,106,0.18); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); }
+    }
+
+    .join-btn.pulse-glow {
+      animation: joinPulseGlow 1.6s ease-in-out;
+    }
+
+    /* Preserve column rotation during pulse */
+    .grid-column:first-child .join-btn.pulse-glow {
+      animation: joinPulseGlowLeft 1.6s ease-in-out;
+    }
+    .grid-column:last-child .join-btn.pulse-glow {
+      animation: joinPulseGlowRight 1.6s ease-in-out;
+    }
+
+    @keyframes joinPulseGlowLeft {
+      0%   { transform: rotate(90deg) scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); background: rgba(26,122,106,0.18); }
+      30%  { transform: rotate(90deg) scale(1.12); box-shadow: 0 0 12px 4px rgba(26,122,106,0.35), 0 0 20px 8px rgba(255,255,255,0.15); background: rgba(255,255,255,0.35); }
+      60%  { transform: rotate(90deg) scale(1.05); box-shadow: 0 0 8px 2px rgba(26,122,106,0.18), 0 0 14px 5px rgba(255,255,255,0.08); background: rgba(255,255,255,0.2); }
+      100% { transform: rotate(90deg) scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); background: rgba(26,122,106,0.18); }
+    }
+
+    @keyframes joinPulseGlowRight {
+      0%   { transform: rotate(-90deg) scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); background: rgba(26,122,106,0.18); }
+      30%  { transform: rotate(-90deg) scale(1.12); box-shadow: 0 0 12px 4px rgba(26,122,106,0.35), 0 0 20px 8px rgba(255,255,255,0.15); background: rgba(255,255,255,0.35); }
+      60%  { transform: rotate(-90deg) scale(1.05); box-shadow: 0 0 8px 2px rgba(26,122,106,0.18), 0 0 14px 5px rgba(255,255,255,0.08); background: rgba(255,255,255,0.2); }
+      100% { transform: rotate(-90deg) scale(1); box-shadow: 0 0 0 0 rgba(26,122,106,0); background: rgba(26,122,106,0.18); }
+    }
+
+    /* ── QR Eliminated State (replaces tile content when life = 0) ── */
+    .tile-qr { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; gap: 4px; }
+    .tile-qr.active { display: flex; }
+    .tile-normal.hidden { display: none; }
+
+    .player-tile.eliminated {
+      background-color: rgb(245,239,227) !important;
+      border: 2px solid rgb(184,168,138) !important;
+    }
+
+    .qr-label {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 6px;
+      color: rgb(138,154,142);
+    }
+
+    .qr-box {
+      width: 50px;
+      height: 50px;
+      background: rgb(44,62,54);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+
+    .qr-pattern {
+      width: 100%;
+      height: 100%;
+      background: repeating-conic-gradient(#e8dcc8 0% 25%, rgb(44,62,54) 0% 50%) 50% / 8px 8px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr-center {
+      background: rgb(44,62,54);
+      padding: 2px;
+      border-radius: 3px;
+    }
+
+    .qr-badge {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 6px;
+      font-weight: 800;
+      color: rgb(245,239,227);
+    }
+
+    .qr-player-label {
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 5px;
+      color: rgb(138,154,142);
+      font-style: italic;
+    }
+
+    .revive-btn {
+      padding: 3px 8px;
+      background: rgba(42,138,86,0.15);
+      border: 1px solid rgba(42,138,86,0.35);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 7px;
+      color: rgb(42,138,86);
+      margin-top: 2px;
+    }
+
+    .revive-btn:active {
+      transform: scale(0.9);
+    }
+
+    /* ── Join Slot Modal ── */
+    .join-modal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.55);
+      display: none; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .join-modal.active { display: flex; }
+
+    .join-modal-card {
+      width: calc(100% - 40px); max-width: 335px;
+      background: rgb(245,239,227);
+      border: 1.3px solid rgb(184,168,138);
+      border-radius: 20px; padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      position: relative;
+      text-align: center;
+    }
+
+    .join-modal-title {
+      font-weight: 600; font-size: 16px; color: rgb(44,62,54);
+      margin-bottom: 4px; text-align: left;
+    }
+
+    .join-modal-subtitle {
+      font-size: 12px; color: rgb(90,110,98);
+      margin-bottom: 16px;
+    }
+
+    .join-qr-box {
+      width: 130px; height: 130px;
+      margin: 0 auto;
+      background: rgb(44,62,54);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 8px;
+    }
+
+    .join-qr-pattern {
+      width: 100%; height: 100%;
+      background: repeating-conic-gradient(#e8dcc8 0% 25%, rgb(44,62,54) 0% 50%) 50% / 10px 10px;
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .join-qr-center {
+      background: rgb(44,62,54);
+      padding: 6px;
+      border-radius: 6px;
+    }
+
+    .join-qr-badge {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800;
+      color: rgb(245,239,227);
+    }
+
+    .join-slot-code {
+      margin-top: 12px;
+      padding: 6px 14px;
+      background: rgb(222,212,192);
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    .join-slot-code span {
+      color: rgb(184,146,46);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 3px;
+    }
+
+    .join-simulate-btn {
+      margin-top: 14px;
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, rgb(26,122,106) 0%, rgb(21,138,114) 100%);
+      border: none; border-radius: 10px;
+      color: rgb(245,239,227);
+      font-weight: 600; font-size: 14px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+
+    .join-simulate-btn:active { transform: scale(0.98); }
+
+    /* ── Bottom Nav (same as Single View) ── */
+    .bottom-nav {
+      margin-top: auto;
+      padding-top: 16px;
+      margin-bottom: 16px;
+      height: 84px;
+      border-radius: 26px;
+      border-top: 1px solid rgba(184,168,138,0.5);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; cursor: pointer; flex: 1;
+      transition: all 0.2s ease;
+    }
+    .nav-item:active { transform: scale(0.9); }
+
+    .nav-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+
+    .dice-icon {
+      width: 24px; height: 24px;
+      border: 1.75px solid rgb(26,122,106); border-radius: 4px;
+      position: relative;
+    }
+    .dice-dot {
+      width: 3px; height: 3px; background: rgb(26,122,106);
+      position: absolute; border-radius: 50%;
+    }
+    .dice-dot:nth-child(1) { top: 3px; left: 3px; }
+    .dice-dot:nth-child(2) { top: 3px; right: 3px; }
+    .dice-dot:nth-child(3) { top: 9px; left: 9px; }
+    .dice-dot:nth-child(4) { bottom: 3px; left: 3px; }
+    .dice-dot:nth-child(5) { bottom: 3px; right: 3px; }
+
+    .star-icon {
+      width: 24px; height: 24px;
+      border: 1.75px solid rgb(26,122,106); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .star {
+      width: 12px; height: 12px;
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      background: rgb(26,122,106);
+    }
+
+    .nav-label { font-weight: 500; font-size: 12px; color: rgb(90,110,98); }
+
+    .list-view-button {
+      flex: 1; height: 64px;
+      background: linear-gradient(135deg, rgb(21,138,114) 0%, rgb(26,122,106) 100%);
+      border-radius: 18px; border: 1px solid rgb(56,158,133);
+      box-shadow: 0 4px 12px rgba(26,120,105,0.45);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; cursor: pointer;
+      color: rgb(245,239,227); font-weight: 700; font-size: 12px;
+      transition: all 0.2s ease;
+    }
+    .list-view-button:active { transform: scale(0.95); }
+
+    .list-icon {
+      width: 16px; height: 12px;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .list-icon span {
+      height: 1.5px; background: rgb(245,239,227); border-radius: 1px;
+    }
+
+    /* ── Dice Modal ── */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .dice-modal {
+      width: calc(100% - 40px);
+      max-width: 335px;
+      background: rgb(245,239,227);
+      border: 1.3px solid rgb(184,168,138);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      position: relative;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: rgb(90,110,98);
+      cursor: pointer;
+    }
+
+    .modal-close:active {
+      transform: scale(0.9);
+    }
+
+    .modal-title {
+      font-weight: 600;
+      font-size: 16px;
+      color: rgb(44,62,54);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .tab-group {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 8px 16px;
+      border: 1.3px solid rgb(184,168,138);
+      background: rgb(222,212,192);
+      color: rgb(44,62,54);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: all 0.2s ease;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, rgb(26,122,106) 0%, rgb(21,138,114) 100%);
+      color: rgb(245,239,227);
+      border-color: transparent;
+    }
+
+    .result-display {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 96px;
+      color: rgb(26,122,106);
+      text-align: center;
+      margin-bottom: 8px;
+      line-height: 1;
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rolling-text {
+      font-size: 12px;
+      color: rgb(90,110,98);
+      text-align: center;
+      margin-bottom: 20px;
+      min-height: 16px;
+    }
+
+    .roll-button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, rgb(26,122,106) 0%, rgb(21,138,114) 100%);
+      border: none;
+      border-radius: 10px;
+      color: rgb(245,239,227);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .roll-button:active {
+      transform: scale(0.98);
+    }
+
+    /* ── Counters Modal ── */
+    .counters-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .counters-overlay.active {
+      display: flex;
+    }
+
+    .counters-popup-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .counters-popup-wrapper.facing-left {
+      flex-direction: row;
+    }
+
+    .counters-popup-wrapper.facing-right {
+      flex-direction: row;
+    }
+
+    .counters-popup-wrapper.facing-left .counters-modal {
+      transform: rotate(90deg);
+    }
+
+    .counters-popup-wrapper.facing-right .counters-modal {
+      transform: rotate(-90deg);
+    }
+
+    .counters-flip-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1.3px solid rgb(184,168,138);
+      background: rgb(245,239,227);
+      color: rgb(44,62,54);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1002;
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transition: all 0.2s ease;
+    }
+
+    .counters-flip-btn:active {
+      transform: translateX(-50%) scale(0.9);
+    }
+
+    .counters-flip-btn svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .counters-modal {
+      width: 300px;
+      background: rgb(245,239,227);
+      border: 1.3px solid rgb(184,168,138);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      position: relative;
+      transition: transform 0.3s ease;
+    }
+
+    .counters-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .counters-title {
+      font-weight: 600;
+      font-size: 16px;
+      color: rgb(44,62,54);
+    }
+
+    /* Player Selector */
+    .player-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .player-selector-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid rgb(184,168,138);
+      background: rgb(222,212,192);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Jaldi', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      color: rgb(245,239,227);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .player-selector-btn.active {
+      border-color: rgb(44,62,54);
+      box-shadow: 0 0 0 2px rgb(44,62,54);
+      transform: scale(1.08);
+    }
+
+    .player-selector-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Selected player info */
+    .selected-player-info {
+      text-align: center;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgb(184,168,138);
+    }
+
+    .selected-commander {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      color: rgb(44,62,54);
+      margin-bottom: 2px;
+    }
+
+    .selected-player-name {
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: rgb(90,110,98);
+    }
+
+    .counter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px;
+      background: rgb(222,212,192);
+      border-radius: 12px;
+      margin-bottom: 10px;
+    }
+
+    .counter-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .counter-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .counter-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .counter-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .counter-name {
+      font-weight: 400;
+      font-size: 14px;
+      color: rgb(44,62,54);
+    }
+
+    .counter-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .counter-btn {
+      width: 28px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1.3px solid rgb(184,168,138);
+      background: rgb(245,239,227);
+      color: rgb(44,62,54);
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .counter-btn:active {
+      transform: scale(0.9);
+    }
+
+    .counter-value {
+      font-weight: 700;
+      font-size: 24px;
+      color: rgb(44,62,54);
+      min-width: 28px;
+      text-align: center;
+    }
+
+    /* Counter indicators on tiles (above life number) */
+    .tile-counters {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      min-height: 14px;
+      margin-bottom: 6px;
+    }
+
+    .tile-counter-indicator {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      opacity: 0.85;
+    }
+
+    .tile-counter-indicator.visible {
+      display: flex;
+    }
+
+    .tile-counter-indicator svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    .tile-counter-indicator svg path {
+      stroke: rgb(44,62,54);
+      stroke-width: 2.8;
+    }
+
+    .claimed .tile-counter-indicator svg path {
+      stroke: rgb(245,239,227);
+    }
+
+    .tile-counter-number {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      color: rgb(44,62,54);
+      line-height: 1;
+    }
+
+    .claimed .tile-counter-number {
+      color: rgb(245,239,227);
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgb(44,62,54);
+      color: rgb(245,239,227);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s ease;
+      z-index: 9999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Grid Container (2 flex columns, like JSX) -->
+    <div class="grid-container">
+      <!-- Left Column (rotate-left = 90°) -->
+      <div class="grid-column">
+        <!-- Player 1 (Frederico, Teal, CLAIMED) -->
+        <div class="player-tile p1 claimed" id="tile1">
+          <div class="tile-content rotate-left">
+            <div class="tile-normal" id="normal1">
+              <div class="tile-counters" id="counters1">
+                <div class="tile-counter-indicator" id="poison1Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M11.3 15.8C16.8 15.8 21.3 12.6 21.3 8.6C21.3 4.6 16.8 1.3 11.3 1.3C5.8 1.3 1.3 4.6 1.3 8.6C1.3 12.6 5.8 15.8 11.3 15.8Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 6.8L3.8 3.1M15 6.8L18.8 3.1M11.3 15.8V21.3M6.3 19.5H16.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="poison1Disp">0</span></div>
+                <div class="tile-counter-indicator" id="exp1Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M1.3 21.3L3 5.7L7.1 12.4L11.3 1.3L15.5 12.4L19.6 5.7L21.3 21.3H1.3Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.3 21.3H21.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="exp1Disp">0</span></div>
+                <div class="tile-counter-indicator" id="energy1Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M13.8 1.3L1.3 12.7H11.3L8.8 21.3L21.3 9.9H11.3L13.8 1.3Z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="energy1Disp">0</span></div>
+              </div>
+              <div class="life-display">
+                <button class="life-minus-btn" data-player="1">−</button>
+                <div class="life-number" id="life1">40</div>
+                <button class="life-plus-btn" data-player="1">+</button>
+              </div>
+              <div class="tile-commander">Atraxa, Praetors' Voice</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Player 3 (Unclaimed, Green slot) -->
+        <div class="player-tile unclaimed" id="tile3">
+          <div class="join-btn" data-slot="3">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C9.657 1 11 2.343 11 4C11 5.657 9.657 7 8 7C6.343 7 5 5.657 5 4C5 2.343 6.343 1 8 1Z" stroke="rgb(26,122,106)" stroke-width="1.5"/><path d="M3 14C3 11.239 5.239 9 8 9C10.761 9 13 11.239 13 14" stroke="rgb(26,122,106)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div class="tile-content rotate-left">
+            <div class="tile-normal" id="normal3">
+              <div class="tile-counters" id="counters3">
+                <div class="tile-counter-indicator" id="poison3Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M11.3 15.8C16.8 15.8 21.3 12.6 21.3 8.6C21.3 4.6 16.8 1.3 11.3 1.3C5.8 1.3 1.3 4.6 1.3 8.6C1.3 12.6 5.8 15.8 11.3 15.8Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 6.8L3.8 3.1M15 6.8L18.8 3.1M11.3 15.8V21.3M6.3 19.5H16.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="poison3Disp">0</span></div>
+                <div class="tile-counter-indicator" id="exp3Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M1.3 21.3L3 5.7L7.1 12.4L11.3 1.3L15.5 12.4L19.6 5.7L21.3 21.3H1.3Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.3 21.3H21.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="exp3Disp">0</span></div>
+                <div class="tile-counter-indicator" id="energy3Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M13.8 1.3L1.3 12.7H11.3L8.8 21.3L21.3 9.9H11.3L13.8 1.3Z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="energy3Disp">0</span></div>
+              </div>
+              <div class="life-display">
+                <button class="life-minus-btn" data-player="3">−</button>
+                <div class="life-number" id="life3">40</div>
+                <button class="life-plus-btn" data-player="3">+</button>
+              </div>
+              <div class="commander-dash">Player 3</div>
+            </div>
+            <div class="tile-qr" id="qr3">
+              <div class="qr-label">Scan to review game</div>
+              <div class="qr-box">
+                <div class="qr-pattern">
+                  <div class="qr-center"><div class="qr-badge" style="background:linear-gradient(135deg,rgb(42,138,86),rgb(184,146,46))">P</div></div>
+                </div>
+              </div>
+              <div class="qr-player-label">Player 3 — eliminated</div>
+              <button class="revive-btn" data-player="3">Revive</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column (rotate-right = -90°) -->
+      <div class="grid-column">
+        <!-- Player 2 (Unclaimed, Red slot) -->
+        <div class="player-tile unclaimed" id="tile2">
+          <div class="join-btn" data-slot="2">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C9.657 1 11 2.343 11 4C11 5.657 9.657 7 8 7C6.343 7 5 5.657 5 4C5 2.343 6.343 1 8 1Z" stroke="rgb(26,122,106)" stroke-width="1.5"/><path d="M3 14C3 11.239 5.239 9 8 9C10.761 9 13 11.239 13 14" stroke="rgb(26,122,106)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div class="tile-content rotate-right">
+            <div class="tile-normal" id="normal2">
+              <div class="tile-counters" id="counters2">
+                <div class="tile-counter-indicator" id="poison2Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M11.3 15.8C16.8 15.8 21.3 12.6 21.3 8.6C21.3 4.6 16.8 1.3 11.3 1.3C5.8 1.3 1.3 4.6 1.3 8.6C1.3 12.6 5.8 15.8 11.3 15.8Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 6.8L3.8 3.1M15 6.8L18.8 3.1M11.3 15.8V21.3M6.3 19.5H16.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="poison2Disp">0</span></div>
+                <div class="tile-counter-indicator" id="exp2Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M1.3 21.3L3 5.7L7.1 12.4L11.3 1.3L15.5 12.4L19.6 5.7L21.3 21.3H1.3Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.3 21.3H21.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="exp2Disp">0</span></div>
+                <div class="tile-counter-indicator" id="energy2Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M13.8 1.3L1.3 12.7H11.3L8.8 21.3L21.3 9.9H11.3L13.8 1.3Z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="energy2Disp">0</span></div>
+              </div>
+              <div class="life-display">
+                <button class="life-minus-btn" data-player="2">−</button>
+                <div class="life-number" id="life2">40</div>
+                <button class="life-plus-btn" data-player="2">+</button>
+              </div>
+              <div class="commander-dash">Player 2</div>
+            </div>
+            <div class="tile-qr" id="qr2">
+              <div class="qr-label">Scan to review game</div>
+              <div class="qr-box">
+                <div class="qr-pattern">
+                  <div class="qr-center"><div class="qr-badge" style="background:linear-gradient(135deg,rgb(168,74,58),rgb(184,146,46))">P</div></div>
+                </div>
+              </div>
+              <div class="qr-player-label">Player 2 — eliminated</div>
+              <button class="revive-btn" data-player="2">Revive</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Player 4 (Unclaimed, Gold slot) -->
+        <div class="player-tile unclaimed" id="tile4">
+          <div class="join-btn" data-slot="4">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C9.657 1 11 2.343 11 4C11 5.657 9.657 7 8 7C6.343 7 5 5.657 5 4C5 2.343 6.343 1 8 1Z" stroke="rgb(26,122,106)" stroke-width="1.5"/><path d="M3 14C3 11.239 5.239 9 8 9C10.761 9 13 11.239 13 14" stroke="rgb(26,122,106)" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div class="tile-content rotate-right">
+            <div class="tile-normal" id="normal4">
+              <div class="tile-counters" id="counters4">
+                <div class="tile-counter-indicator" id="poison4Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M11.3 15.8C16.8 15.8 21.3 12.6 21.3 8.6C21.3 4.6 16.8 1.3 11.3 1.3C5.8 1.3 1.3 4.6 1.3 8.6C1.3 12.6 5.8 15.8 11.3 15.8Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 6.8L3.8 3.1M15 6.8L18.8 3.1M11.3 15.8V21.3M6.3 19.5H16.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="poison4Disp">0</span></div>
+                <div class="tile-counter-indicator" id="exp4Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M1.3 21.3L3 5.7L7.1 12.4L11.3 1.3L15.5 12.4L19.6 5.7L21.3 21.3H1.3Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.3 21.3H21.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="exp4Disp">0</span></div>
+                <div class="tile-counter-indicator" id="energy4Ind"><svg viewBox="0 0 23 23" fill="none"><path d="M13.8 1.3L1.3 12.7H11.3L8.8 21.3L21.3 9.9H11.3L13.8 1.3Z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tile-counter-number" id="energy4Disp">0</span></div>
+              </div>
+              <div class="life-display">
+                <button class="life-minus-btn" data-player="4">−</button>
+                <div class="life-number" id="life4">40</div>
+                <button class="life-plus-btn" data-player="4">+</button>
+              </div>
+              <div class="commander-dash">Player 4</div>
+            </div>
+            <div class="tile-qr" id="qr4">
+              <div class="qr-label">Scan to review game</div>
+              <div class="qr-box">
+                <div class="qr-pattern">
+                  <div class="qr-center"><div class="qr-badge" style="background:linear-gradient(135deg,rgb(184,146,46),rgb(184,146,46))">P</div></div>
+                </div>
+              </div>
+              <div class="qr-player-label">Player 4 — eliminated</div>
+              <button class="revive-btn" data-player="4">Revive</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Nav (same as Single View) -->
+    <div class="bottom-nav">
+      <div class="nav-item" id="diceNav">
+        <div class="nav-icon">
+          <div class="dice-icon">
+            <div class="dice-dot"></div><div class="dice-dot"></div>
+            <div class="dice-dot"></div><div class="dice-dot"></div>
+            <div class="dice-dot"></div>
+          </div>
+        </div>
+        <div class="nav-label">Dice</div>
+      </div>
+      <div class="nav-item" id="countersNav">
+        <div class="nav-icon">
+          <div class="star-icon"><div class="star"></div></div>
+        </div>
+        <div class="nav-label">Counters</div>
+      </div>
+      <button class="list-view-button" id="listViewBtn">
+        <div class="list-icon">
+          <span></span><span></span><span></span>
+        </div>
+        Single View
+      </button>
+    </div>
+  </div>
+
+  <!-- Dice Modal -->
+  <div class="modal-overlay" id="diceModal">
+    <div class="dice-modal">
+      <button class="modal-close" id="closeDice">✕</button>
+      <div class="modal-title">Dice Roller</div>
+      <div class="tab-group">
+        <button class="tab active" data-tab="d6">D6</button>
+        <button class="tab" data-tab="d20">D20</button>
+        <button class="tab" data-tab="coin">Coin</button>
+      </div>
+      <div class="result-display" id="resultDisplay">—</div>
+      <div class="rolling-text" id="rollingText"></div>
+      <button class="roll-button" id="rollBtn">Roll</button>
+    </div>
+  </div>
+
+  <!-- Counters Modal -->
+  <div class="counters-overlay" id="countersOverlay">
+    <div class="counters-popup-wrapper facing-left" id="countersWrapper">
+      <div class="counters-modal">
+        <div class="counters-header">
+          <div class="counters-title">Counters</div>
+          <button class="modal-close" id="closeCounters">✕</button>
+        </div>
+        <!-- Player Selector -->
+        <div class="player-selector" id="playerSelector"></div>
+        <!-- Selected Player Info -->
+        <div class="selected-player-info" id="selectedPlayerInfo">
+          <div class="selected-commander" id="selectedCommander">—</div>
+          <div class="selected-player-name" id="selectedPlayerName">—</div>
+        </div>
+        <!-- Counter Rows -->
+        <div class="counter-row">
+          <div class="counter-label"><div class="counter-icon"><svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.3 15.8455C16.8228 15.8455 21.3 12.5894 21.3 8.57278C21.3 4.55616 16.8228 1.30005 11.3 1.30005C5.77714 1.30005 1.29999 4.55616 1.29999 8.57278C1.29999 12.5894 5.77714 15.8455 11.3 15.8455Z" stroke="#2C3E36" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.54999 6.75453L3.79999 3.11816M15.05 6.75453L18.8 3.11816M11.3 15.8454V21.3M6.29999 19.4818H16.3" stroke="#2C3E36" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="counter-name">Poison</div></div>
+          <div class="counter-controls">
+            <button class="counter-btn" data-counter="poison" data-action="minus">−</button>
+            <div class="counter-value" id="poisonValue">0</div>
+            <button class="counter-btn" data-counter="poison" data-action="plus">+</button>
+          </div>
+        </div>
+        <div class="counter-row">
+          <div class="counter-label"><div class="counter-icon"><svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.30002 21.3L2.96668 5.74449L7.13335 12.4112L11.3 1.30005L15.4667 12.4112L19.6334 5.74449L21.3 21.3H1.30002Z" stroke="#2C3E36" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.30002 21.3H21.3" stroke="#2C3E36" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="counter-name">Experience</div></div>
+          <div class="counter-controls">
+            <button class="counter-btn" data-counter="experience" data-action="minus">−</button>
+            <div class="counter-value" id="experienceValue">0</div>
+            <button class="counter-btn" data-counter="experience" data-action="plus">+</button>
+          </div>
+        </div>
+        <div class="counter-row">
+          <div class="counter-label"><div class="counter-icon"><svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.8 1.30005L1.30005 12.7286H11.3L8.80005 21.3L21.3 9.87148H11.3L13.8 1.30005Z" stroke="#2C3E36" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="counter-name">Energy</div></div>
+          <div class="counter-controls">
+            <button class="counter-btn" data-counter="energy" data-action="minus">−</button>
+            <div class="counter-value" id="energyValue">0</div>
+            <button class="counter-btn" data-counter="energy" data-action="plus">+</button>
+          </div>
+        </div>
+      </div>
+        <!-- Flip button (inside modal, positioned on right edge) -->
+        <button class="counters-flip-btn" id="countersFlipBtn">
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 2L18 6L14 10" stroke="#2C3E36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 6H7C4.24 6 2 8.24 2 11V11" stroke="#2C3E36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 18L2 14L6 10" stroke="#2C3E36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 14H13C15.76 14 18 11.76 18 9V9" stroke="#2C3E36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Slot Modal -->
+  <div class="join-modal" id="joinModal">
+    <div class="join-modal-card">
+      <button class="modal-close" id="closeJoin">✕</button>
+      <div class="join-modal-title" id="joinTitle">Join Slot 2</div>
+      <div class="join-modal-subtitle">Scan to claim this player slot</div>
+      <div class="join-qr-box">
+        <div class="join-qr-pattern">
+          <div class="join-qr-center">
+            <div class="join-qr-badge" id="joinBadge">2</div>
+          </div>
+        </div>
+      </div>
+      <div class="join-slot-code"><span id="joinCode">SLOT-2-ARC7</span></div>
+      <button class="join-simulate-btn" id="joinSimBtn">✓ Simulate: Player Joins</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // State
+    const state = {
+      players: {
+        1: { life: 40, name: 'Frederico', commander: 'Atraxa, Praetors\' Voice', claimed: true, colors: ['W','U','B','G'] },
+        2: { life: 40, name: 'Player 2', commander: null, claimed: false, colors: [] },
+        3: { life: 40, name: 'Player 3', commander: null, claimed: false, colors: [] },
+        4: { life: 40, name: 'Player 4', commander: null, claimed: false, colors: [] }
+      },
+      playerColors: {
+        1: 'rgb(26,122,106)',
+        2: 'rgb(168,74,58)',
+        3: 'rgb(42,138,86)',
+        4: 'rgb(184,146,46)'
+      },
+      playerClasses: { 1: 'p1', 2: 'p2', 3: 'p3', 4: 'p4' },
+      // MTG mana colors for tinting (tuned for subtle backgrounds)
+      // Each mana color has 3 gradient stops (dark, mid, light) + border + shadow, matching Single View style
+      manaColorStyles: {
+        W: { grad: [[160,140,90],[190,170,115],[210,192,140]], border: [220,200,155], shadow: [160,140,90] },
+        U: { grad: [[14,72,110],[26,100,140],[42,125,165]], border: [56,135,170], shadow: [14,72,110] },
+        B: { grad: [[25,18,30],[42,35,50],[60,52,68]], border: [75,65,82], shadow: [25,18,30] },
+        R: { grad: [[120,42,30],[148,64,48],[172,88,68]], border: [185,100,80], shadow: [120,42,30] },
+        G: { grad: [[14,92,77],[26,122,106],[42,143,120]], border: [56,158,133], shadow: [14,92,77] }
+      },
+      usedColors: [],  // track which colors are assigned in the pod
+      simulatedProfiles: [
+        { name: 'Manel', commander: 'Korvold, Fae-Cursed King', colors: ['B','R','G'] },
+        { name: 'Sofia', commander: 'Yuriko, the Tiger\'s Shadow', colors: ['U','B'] },
+        { name: 'Tomás', commander: 'Prossh, Skyraider of Kher', colors: ['B','R','G'] }
+      ],
+      simIndex: 0,
+      joinSlot: null,
+      diceTab: 'd6',
+      rolling: false,
+      counters: {
+        1: { poison: 0, experience: 0, energy: 0 },
+        2: { poison: 0, experience: 0, energy: 0 },
+        3: { poison: 0, experience: 0, energy: 0 },
+        4: { poison: 0, experience: 0, energy: 0 }
+      },
+      selectedCounterPlayer: 1
+    };
+
+    // Pick a single mana color for this player
+    // Priority: first color in identity that isn't already used, else random unused
+    function pickPlayerColor(playerNum) {
+      const p = state.players[playerNum];
+      if (!p.colors || p.colors.length === 0) return null;
+
+      const allMana = Object.keys(state.manaColorStyles);
+
+      // Try first color in identity
+      if (!state.usedColors.includes(p.colors[0])) {
+        state.usedColors.push(p.colors[0]);
+        return p.colors[0];
+      }
+
+      // Try remaining colors in identity
+      for (let i = 1; i < p.colors.length; i++) {
+        if (!state.usedColors.includes(p.colors[i])) {
+          state.usedColors.push(p.colors[i]);
+          return p.colors[i];
+        }
+      }
+
+      // All identity colors taken — pick a random unused mana color
+      const available = allMana.filter(c => !state.usedColors.includes(c));
+      if (available.length > 0) {
+        const pick = available[Math.floor(Math.random() * available.length)];
+        state.usedColors.push(pick);
+        return pick;
+      }
+
+      // All 5 used — fallback to first identity color
+      return p.colors[0];
+    }
+
+    // Apply single-color styling to a tile, matching Single View life-card style
+    function applyColorIdentity(playerNum) {
+      const p = state.players[playerNum];
+      const tile = document.getElementById('tile' + playerNum);
+      if (!p.claimed || !p.colors || p.colors.length === 0) return;
+
+      const mana = pickPlayerColor(playerNum);
+      const style = state.manaColorStyles[mana];
+      if (!style) return;
+
+      // Store assigned color on player
+      p.assignedColor = mana;
+
+      const [d, m, l] = style.grad;
+      const brd = style.border;
+      const shd = style.shadow;
+      const lightText = 'rgb(245,239,227)';
+
+      // 3-stop gradient like Single View
+      tile.style.background = `linear-gradient(135deg, rgb(${d[0]},${d[1]},${d[2]}) 0%, rgb(${m[0]},${m[1]},${m[2]}) 50%, rgb(${l[0]},${l[1]},${l[2]}) 100%)`;
+      tile.style.border = `1.5px solid rgb(${brd[0]},${brd[1]},${brd[2]})`;
+      tile.style.boxShadow = `0 8px 20px rgba(${shd[0]},${shd[1]},${shd[2]},0.35), 0 2px 6px rgba(${shd[0]},${shd[1]},${shd[2]},0.25)`;
+
+      // Light text
+      const cmd = tile.querySelector('.tile-commander');
+      if (cmd) cmd.style.color = lightText;
+      const lifeNum = tile.querySelector('.life-number');
+      if (lifeNum) lifeNum.style.color = lightText;
+    }
+
+    // Update life display + handle eliminated → QR state
+    function updateLifeDisplay(playerNum) {
+      const life = state.players[playerNum].life;
+      const lifeEl = document.getElementById('life' + playerNum);
+      const normalEl = document.getElementById('normal' + playerNum);
+      const qrEl = document.getElementById('qr' + playerNum);
+      const tile = document.getElementById('tile' + playerNum);
+      if (!lifeEl) return;
+
+      lifeEl.textContent = life;
+
+      // Critical state (life <= 10)
+      if (life <= 10) {
+        lifeEl.classList.add('critical');
+      } else {
+        lifeEl.classList.remove('critical');
+      }
+
+      // Eliminated → QR state only for unclaimed players
+      if (life === 0 && !state.players[playerNum].claimed) {
+        normalEl.classList.add('hidden');
+        if (qrEl) qrEl.classList.add('active');
+        tile.classList.add('eliminated');
+        const joinBtn = tile.querySelector('.join-btn');
+        if (joinBtn) joinBtn.style.display = 'none';
+      } else if (life > 0) {
+        normalEl.classList.remove('hidden');
+        if (qrEl) qrEl.classList.remove('active');
+        tile.classList.remove('eliminated');
+        const joinBtn = tile.querySelector('.join-btn');
+        if (joinBtn && !state.players[playerNum].claimed) joinBtn.style.display = 'flex';
+      }
+    }
+
+    // Life control buttons
+    document.querySelectorAll('.life-minus-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const playerNum = parseInt(btn.dataset.player);
+        state.players[playerNum].life = Math.max(0, state.players[playerNum].life - 1);
+        updateLifeDisplay(playerNum);
+      });
+    });
+
+    document.querySelectorAll('.life-plus-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const playerNum = parseInt(btn.dataset.player);
+        state.players[playerNum].life = Math.min(999, state.players[playerNum].life + 1);
+        updateLifeDisplay(playerNum);
+      });
+    });
+
+    // Revive buttons
+    document.querySelectorAll('.revive-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const playerNum = parseInt(btn.dataset.player);
+        state.players[playerNum].life = 1;
+        updateLifeDisplay(playerNum);
+      });
+    });
+
+    // Join Slot modal
+    const joinModal = document.getElementById('joinModal');
+    const joinTitle = document.getElementById('joinTitle');
+    const joinBadge = document.getElementById('joinBadge');
+    const joinCode = document.getElementById('joinCode');
+
+    function openJoinModal(slotNum) {
+      state.joinSlot = slotNum;
+      joinTitle.textContent = 'Join Slot ' + slotNum;
+      joinBadge.textContent = slotNum;
+      joinBadge.style.background = 'linear-gradient(135deg,' + state.playerColors[slotNum] + ',rgb(184,146,46))';
+      joinCode.textContent = 'SLOT-' + slotNum + '-ARC7';
+      joinModal.classList.add('active');
+    }
+
+    document.querySelectorAll('.join-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const slot = parseInt(btn.dataset.slot);
+        openJoinModal(slot);
+      });
+    });
+
+    document.getElementById('closeJoin').addEventListener('click', () => {
+      joinModal.classList.remove('active');
+    });
+
+    joinModal.addEventListener('click', e => {
+      if (e.target === joinModal) joinModal.classList.remove('active');
+    });
+
+    // Simulate: Player Joins — claim the slot with a simulated profile
+    document.getElementById('joinSimBtn').addEventListener('click', () => {
+      const slot = state.joinSlot;
+      if (!slot) return;
+      joinModal.classList.remove('active');
+
+      // Get next simulated profile
+      const profile = state.simulatedProfiles[state.simIndex % state.simulatedProfiles.length];
+      state.simIndex++;
+
+      // Update state
+      state.players[slot].name = profile.name;
+      state.players[slot].commander = profile.commander;
+      state.players[slot].claimed = true;
+      state.players[slot].colors = profile.colors || [];
+
+      // Update tile visually
+      const tile = document.getElementById('tile' + slot);
+      tile.classList.remove('unclaimed');
+      tile.classList.add('claimed', state.playerClasses[slot]);
+
+      // Hide join button
+      const joinBtn = tile.querySelector('.join-btn');
+      if (joinBtn) joinBtn.style.display = 'none';
+
+      // Update commander text
+      const normalEl = document.getElementById('normal' + slot);
+      const cmdEl = normalEl.querySelector('.commander-dash');
+      if (cmdEl) {
+        cmdEl.className = 'tile-commander';
+        cmdEl.textContent = profile.commander;
+      }
+
+      // Update QR player label
+      const qrLabel = tile.querySelector('.qr-player-label');
+      if (qrLabel) qrLabel.textContent = profile.name + ' — eliminated';
+
+      // Apply color identity tint
+      applyColorIdentity(slot);
+
+      // Toast
+      const toast = document.getElementById('toast');
+      toast.textContent = profile.name + ' joined as Player ' + slot + '!';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    });
+
+    // Dice modal
+    const diceModal = document.getElementById('diceModal');
+    const resultDisplay = document.getElementById('resultDisplay');
+    const rollingText = document.getElementById('rollingText');
+    const tabs = document.querySelectorAll('.tab');
+
+    document.getElementById('diceNav').addEventListener('click', () => {
+      diceModal.classList.add('active');
+      resultDisplay.textContent = '—';
+      rollingText.textContent = '';
+    });
+
+    document.getElementById('closeDice').addEventListener('click', () => {
+      diceModal.classList.remove('active');
+    });
+
+    diceModal.addEventListener('click', e => {
+      if (e.target === diceModal) diceModal.classList.remove('active');
+    });
+
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      t.classList.add('active');
+      state.diceTab = t.dataset.tab;
+      resultDisplay.textContent = '—';
+      rollingText.textContent = '';
+    }));
+
+    document.getElementById('rollBtn').addEventListener('click', () => {
+      if (state.rolling) return;
+      state.rolling = true;
+      rollingText.textContent = 'Rolling…';
+
+      let frame = 0;
+      const interval = setInterval(() => {
+        frame++;
+        const max = state.diceTab === 'd6' ? 6 : state.diceTab === 'd20' ? 20 : 2;
+        const val = Math.floor(Math.random() * max) + 1;
+        resultDisplay.textContent = state.diceTab === 'coin' ? (val === 1 ? 'H' : 'T') : val;
+
+        if (frame >= 14) {
+          clearInterval(interval);
+          state.rolling = false;
+          const final = Math.floor(Math.random() * max) + 1;
+          resultDisplay.textContent = state.diceTab === 'coin' ? (final === 1 ? 'HEADS' : 'TAILS') : final;
+          rollingText.textContent = '';
+        }
+      }, 70);
+    });
+
+    // Counters modal
+    // Counters popup
+    const countersOverlay = document.getElementById('countersOverlay');
+    const countersWrapper = document.getElementById('countersWrapper');
+    const playerSelector = document.getElementById('playerSelector');
+
+    // Build player selector buttons
+    function buildPlayerSelector() {
+      playerSelector.innerHTML = '';
+      for (let i = 1; i <= 4; i++) {
+        const p = state.players[i];
+        const btn = document.createElement('button');
+        btn.className = 'player-selector-btn' + (i === state.selectedCounterPlayer ? ' active' : '');
+        btn.dataset.player = i;
+
+        // Use first letter of name, apply player color
+        btn.textContent = p.name.charAt(0).toUpperCase();
+
+        // Apply assigned color as background
+        if (p.claimed && p.assignedColor && state.manaColorStyles[p.assignedColor]) {
+          const style = state.manaColorStyles[p.assignedColor];
+          const m = style.grad[1];
+          btn.style.background = `rgb(${m[0]},${m[1]},${m[2]})`;
+          btn.style.borderColor = `rgb(${style.border[0]},${style.border[1]},${style.border[2]})`;
+        } else {
+          btn.style.background = 'rgb(222,212,192)';
+          btn.style.color = 'rgb(90,110,98)';
+        }
+
+        btn.addEventListener('click', () => selectCounterPlayer(i));
+        playerSelector.appendChild(btn);
+      }
+    }
+
+    // Select a player for counter editing
+    function selectCounterPlayer(num) {
+      state.selectedCounterPlayer = num;
+      const p = state.players[num];
+
+      // Update selector active states
+      playerSelector.querySelectorAll('.player-selector-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.player) === num);
+      });
+
+      // Update info
+      document.getElementById('selectedCommander').textContent = p.commander || '—';
+      document.getElementById('selectedPlayerName').textContent = p.claimed ? p.name : 'Player ' + num;
+
+      // Update counter values shown
+      const c = state.counters[num];
+      document.getElementById('poisonValue').textContent = c.poison;
+      document.getElementById('experienceValue').textContent = c.experience;
+      document.getElementById('energyValue').textContent = c.energy;
+    }
+
+    // Update tile counter indicators for a player
+    function updateTileCounters(num) {
+      const c = state.counters[num];
+      ['poison', 'experience', 'energy'].forEach(type => {
+        const prefix = type === 'experience' ? 'exp' : type;
+        const ind = document.getElementById(prefix + num + 'Ind');
+        const disp = document.getElementById(prefix + num + 'Disp');
+        if (!ind || !disp) return;
+        if (c[type] > 0) {
+          ind.classList.add('visible');
+          disp.textContent = c[type];
+        } else {
+          ind.classList.remove('visible');
+        }
+      });
+    }
+
+    // Open counters
+    document.getElementById('countersNav').addEventListener('click', () => {
+      buildPlayerSelector();
+      selectCounterPlayer(state.selectedCounterPlayer);
+      countersOverlay.classList.add('active');
+    });
+
+    // Close counters
+    document.getElementById('closeCounters').addEventListener('click', () => {
+      countersOverlay.classList.remove('active');
+    });
+
+    countersOverlay.addEventListener('click', e => {
+      if (e.target === countersOverlay) countersOverlay.classList.remove('active');
+    });
+
+    // Flip button
+    document.getElementById('countersFlipBtn').addEventListener('click', e => {
+      e.stopPropagation();
+      countersWrapper.classList.toggle('facing-left');
+      countersWrapper.classList.toggle('facing-right');
+    });
+
+    // Counter +/- buttons
+    document.querySelectorAll('.counter-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const type = btn.dataset.counter;
+        const num = state.selectedCounterPlayer;
+        const c = state.counters[num];
+
+        if (btn.dataset.action === 'plus') c[type]++;
+        else c[type] = Math.max(0, c[type] - 1);
+
+        document.getElementById(type + 'Value').textContent = c[type];
+        updateTileCounters(num);
+      });
+    });
+
+    // List View button
+    document.getElementById('listViewBtn').addEventListener('click', () => {
+      const toast = document.getElementById('toast');
+      toast.textContent = 'Coming Soon';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    });
+
+    // ── Join button pulse reminder ──
+    // First pulse at 60s, then every 8 min. One random unclaimed slot at a time.
+    const PULSE_FIRST_DELAY = 60000;   // 1 minute
+    const PULSE_INTERVAL = 480000;     // 8 minutes
+
+    function pulseRandomUnclaimedBtn() {
+      // Collect unclaimed player numbers
+      const unclaimed = [];
+      for (let i = 1; i <= 4; i++) {
+        if (!state.players[i].claimed) unclaimed.push(i);
+      }
+      if (unclaimed.length === 0) {
+        clearInterval(state._pulseInterval);
+        return;
+      }
+
+      // Pick one at random
+      const pick = unclaimed[Math.floor(Math.random() * unclaimed.length)];
+      const tile = document.getElementById('tile' + pick);
+      const btn = tile ? tile.querySelector('.join-btn') : null;
+      if (!btn) return;
+
+      btn.classList.add('pulse-glow');
+      btn.addEventListener('animationend', function handler() {
+        btn.classList.remove('pulse-glow');
+        btn.removeEventListener('animationend', handler);
+      });
+    }
+
+    // Schedule: first after 1 min, then every 8 min
+    state._pulseTimeout = setTimeout(() => {
+      pulseRandomUnclaimedBtn();
+      state._pulseInterval = setInterval(pulseRandomUnclaimedBtn, PULSE_INTERVAL);
+    }, PULSE_FIRST_DELAY);
+
+    // ── Responsive Cell System ──
+    // Measures each tile, swaps dimensions for rotated content,
+    // and scales life number / buttons to fit.
+    function sizeCells() {
+      document.querySelectorAll('.player-tile').forEach(tile => {
+        const content = tile.querySelector('.tile-content');
+        if (!content) return;
+
+        const tileW = tile.clientWidth;
+        const tileH = tile.clientHeight;
+        const isRotated = content.classList.contains('rotate-left') || content.classList.contains('rotate-right');
+
+        if (isRotated) {
+          // Swap: content width = tile height, content height = tile width
+          // After 90° rotation this fits the tile exactly
+          content.style.width = tileH + 'px';
+          content.style.height = tileW + 'px';
+
+          // The "visual width" the player sees = tileH (the long side)
+          // The "visual height" the player sees = tileW (the short side)
+          const visW = tileH;
+          const visH = tileW;
+
+          // Life number: fill ~55% of the visual height, capped at 120px
+          const lifeSize = Math.min(120, Math.floor(visH * 0.55));
+          // +/- buttons scale with life number
+          const btnSize = Math.max(24, Math.floor(lifeSize * 0.28));
+          const btnFont = Math.max(14, Math.floor(btnSize * 0.6));
+
+          tile.style.setProperty('--life-font-size', lifeSize + 'px');
+          tile.style.setProperty('--btn-size', btnSize + 'px');
+          tile.style.setProperty('--btn-font', btnFont + 'px');
+        } else {
+          // Non-rotated tile (future use for top/bottom positions)
+          content.style.width = '100%';
+          content.style.height = '100%';
+
+          const visH = tileH;
+          const lifeSize = Math.min(120, Math.floor(visH * 0.35));
+          const btnSize = Math.max(24, Math.floor(lifeSize * 0.28));
+          const btnFont = Math.max(14, Math.floor(btnSize * 0.6));
+
+          tile.style.setProperty('--life-font-size', lifeSize + 'px');
+          tile.style.setProperty('--btn-size', btnSize + 'px');
+          tile.style.setProperty('--btn-font', btnFont + 'px');
+        }
+      });
+    }
+
+    // Run on load and resize
+    sizeCells();
+    window.addEventListener('resize', sizeCells);
+
+    // Init
+    for (let i = 1; i <= 4; i++) {
+      updateLifeDisplay(i);
+      applyColorIdentity(i);
+    }
+  </script>
+</body>
+</html>
